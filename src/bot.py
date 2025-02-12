@@ -8,6 +8,8 @@ from config import Config
 from logger import BotLogger
 from reddit_api import RedditAPI
 from post_handler import PostHandler, PostCache
+import asyncio
+from typing import Optional
 
 class RedditBot:
     def __init__(self):
@@ -62,8 +64,40 @@ class RedditBot:
         self.logger.info("Shutdown signal received. Cleaning up...")
         self.running = False
     
-    def run(self):
-        """Main bot loop"""
+    async def process_post_with_llm(self, post) -> Optional[str]:
+        """Process a post through the LLM and handle the response"""
+        try:
+            response = await self.post_handler.process_post(post)
+            if response:
+                self.logger.info(f"Successfully generated response for post {post.id}")
+                return response
+            return None
+        except Exception as e:
+            self.logger.error(f"Error processing post {post.id} with LLM: {str(e)}")
+            return None
+
+    async def process_queue(self):
+        """Process posts from the queue asynchronously"""
+        while self.running:
+            try:
+                if not self.post_queue.empty():
+                    post = self.post_queue.get_nowait()
+                    self.logger.debug(f"Processing post: {post.id}")
+                    
+                    response = await self.process_post_with_llm(post)
+                    if response:
+                        # Store or handle the response as needed
+                        pass
+                    
+                    self.post_queue.task_done()
+                else:
+                    await asyncio.sleep(1)
+            except Exception as e:
+                self.logger.error(f"Error in queue processing: {str(e)}")
+                await asyncio.sleep(5)
+
+    async def run_async(self):
+        """Async version of the main bot loop"""
         self.running = True
         self.logger.info("Bot started successfully")
         
@@ -77,23 +111,17 @@ class RedditBot:
         scheduler_thread = threading.Thread(target=self.run_scheduler)
         scheduler_thread.start()
         
-        while self.running:
-            try:
-                # Process posts from the queue
-                if not self.post_queue.empty():
-                    post = self.post_queue.get(timeout=1)
-                    self.logger.debug(f"Processing post: {post.id}")
-                    # Post processing will be implemented in the next stage
-                    self.post_queue.task_done()
-                else:
-                    time.sleep(1)
-            except Exception as e:
-                self.logger.error(f"Error in main loop: {str(e)}")
-                time.sleep(5)  # Wait before retrying
+        # Process queue asynchronously
+        await self.process_queue()
         
-        # Clean up
+        # Cleanup
         scheduler_thread.join()
+        await self.post_handler.close()
         self.logger.info("Bot shutdown complete")
+
+    def run(self):
+        """Main entry point"""
+        asyncio.run(self.run_async())
 
 if __name__ == "__main__":
     bot = RedditBot()
