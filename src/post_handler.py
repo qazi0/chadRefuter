@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from llm_handler import LLMHandler, OllamaHandler
 from database import DatabaseHandler
+import time
 
 @dataclass
 class RedditPost:
@@ -140,27 +141,7 @@ class PostHandler:
                 # Update database with the response
                 self.db.update_post_response(post.id, response.text)
                 
-                # Post the comment to Reddit
-                comment_id = await self.reddit_api.post_comment(post.id, response.text)
-                
-                if comment_id:
-                    # Save the comment to database
-                    self.db.save_comment(post.id, comment_id, response.text)
-                    
-                    # Log the successful comment
-                    full_message = (
-                        f"Posted comment on {post.id}:\n"
-                        f"Comment ID: {comment_id}\n"
-                        f"Response: {response.text}"
-                    )
-                    
-                    console_message = (
-                        f"Posted comment on {post.id}:\n"
-                        f"Preview: {response.text[:100]}..."
-                    )
-                    
-                    self.logger.info(full_message, console_message)
-                
+                # Return the response without posting the comment
                 return response.text
             
             return None
