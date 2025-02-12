@@ -89,8 +89,13 @@ class PostHandler:
             return [] 
 
     async def process_post(self, post: RedditPost) -> Optional[str]:
-        """Process a post through the LLM"""
+        """Process a post through the LLM and post comment if appropriate"""
         try:
+            # Skip if we've already commented
+            if self.db.has_commented_on_post(post.id):
+                self.logger.debug(f"Already commented on post {post.id}, skipping")
+                return None
+
             # Check if post is purely religious discussion
             religious_keywords = {
                 'god', 'gods', 'religion', 'worship', 'prayer', 'temple', 
@@ -135,23 +140,30 @@ class PostHandler:
                 # Update database with the response
                 self.db.update_post_response(post.id, response.text)
                 
-                # Create full and truncated log messages
-                full_message = (
-                    f"Generated response for post {post.id}:\n"
-                    f"Original title: {post.title}\n"
-                    f"Original body: {post.body}\n"
-                    f"Response: {response.text}"
-                )
+                # Post the comment to Reddit
+                comment_id = await self.reddit_api.post_comment(post.id, response.text)
                 
-                console_message = (
-                    f"Generated response for post {post.id}:\n"
-                    f"Title: {post.title[:50]}{'...' if len(post.title) > 50 else ''}\n"
-                    f"Response preview: {response.text[:100]}..."
-                )
+                if comment_id:
+                    # Save the comment to database
+                    self.db.save_comment(post.id, comment_id, response.text)
+                    
+                    # Log the successful comment
+                    full_message = (
+                        f"Posted comment on {post.id}:\n"
+                        f"Comment ID: {comment_id}\n"
+                        f"Response: {response.text}"
+                    )
+                    
+                    console_message = (
+                        f"Posted comment on {post.id}:\n"
+                        f"Preview: {response.text[:100]}..."
+                    )
+                    
+                    self.logger.info(full_message, console_message)
                 
-                self.logger.info(full_message, console_message)
+                return response.text
             
-            return response.text if response else None
+            return None
             
         except Exception as e:
             self.logger.error(f"Error processing post {post.id} through LLM: {str(e)}")
