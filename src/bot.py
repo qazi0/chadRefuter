@@ -25,7 +25,9 @@ class RedditBot:
         self.reddit_api = RedditAPI(self.config, self.logger)
         self.post_handler = PostHandler(self.reddit_api, self.logger)
         self.running = False
-        self.post_queue = Queue()
+        self.post_queue = asyncio.Queue()
+        self.processing_queue = asyncio.Queue()
+        self._scan_lock = asyncio.Lock()  # Add lock for scanning
         
         # Set up signal handlers
         signal.signal(signal.SIGINT, self.handle_shutdown)
@@ -39,33 +41,34 @@ class RedditBot:
                 f"Last processed post: {last_posts[0][1][:50]}..."
             )
     
-    def scan_posts(self):
+    async def scan_posts(self):
         """Scan for new posts and add them to the processing queue"""
-        try:
-            self.logger.info("Scanning for new posts...")
-            new_posts = self.post_handler.fetch_new_posts(limit=self.config.posts_fetch_limit)
-            for post in new_posts:
-                self.post_queue.put(post)
-            if not new_posts:
-                self.logger.info("No new posts found in this scan")
-        except Exception as e:
-            self.logger.error(f"Error in post scanning: {str(e)}")
+        async with self._scan_lock:  # Ensure only one scan runs at a time
+            try:
+                self.logger.info("Scanning for new posts...")
+                new_posts = self.post_handler.fetch_new_posts(limit=self.config.posts_fetch_limit)
+                for post in new_posts:
+                    await self.post_queue.put(post)
+                if not new_posts:
+                    self.logger.info("No new posts found in this scan")
+            except Exception as e:
+                self.logger.error(f"Error in post scanning: {str(e)}")
     
-    def initial_scan(self):
+    async def initial_scan(self):
         """Perform initial scan of the latest posts"""
         self.logger.info(f"Performing initial scan of the latest {self.config.posts_fetch_limit} posts...")
         try:
             # Clear cache to ensure we process the latest posts
             self.post_handler.post_cache = PostCache(max_size=self.config.post_cache_size)
-            self.scan_posts()
+            await self.scan_posts()
         except Exception as e:
             self.logger.error(f"Error in initial scan: {str(e)}")
     
-    def run_scheduler(self):
-        """Run the scheduler in a separate thread"""
+    async def scheduled_scan(self):
+        """Periodic scan that runs on a schedule"""
         while self.running:
-            schedule.run_pending()
-            time.sleep(1)
+            await self.scan_posts()
+            await asyncio.sleep(self.config.scan_interval)
     
     def handle_shutdown(self, signum, frame):
         """Handle graceful shutdown"""
@@ -77,26 +80,47 @@ class RedditBot:
         try:
             response = await self.post_handler.process_post(post)
             if response:
-                self.logger.info(f"Successfully generated response for post {post.id}")
+                # If response generated, add to processing queue
+                await self.processing_queue.put((post, response))
+                self.logger.info(f"Generated response for post {post.id}, queued for commenting")
                 return response
             return None
         except Exception as e:
             self.logger.error(f"Error processing post {post.id} with LLM: {str(e)}")
             return None
 
+    async def comment_processor(self):
+        """Process the comment queue while respecting rate limits"""
+        while self.running:
+            try:
+                if not self.processing_queue.empty():
+                    post, response = await self.processing_queue.get()
+                    
+                    # Post the comment (this method handles the delay internally)
+                    comment_id = await self.reddit_api.post_comment(post.id, response)
+                    
+                    if comment_id:
+                        self.logger.info(
+                            f"Successfully posted comment on {post.id}",
+                            f"Comment posted: {comment_id}"
+                        )
+                    
+                    self.processing_queue.task_done()
+                else:
+                    await asyncio.sleep(1)
+            except Exception as e:
+                self.logger.error(f"Error in comment processing: {str(e)}")
+                await asyncio.sleep(5)
+
     async def process_queue(self):
         """Process posts from the queue asynchronously"""
         while self.running:
             try:
                 if not self.post_queue.empty():
-                    post = self.post_queue.get_nowait()
+                    post = await self.post_queue.get()
                     self.logger.debug(f"Processing post: {post.id}")
                     
-                    response = await self.process_post_with_llm(post)
-                    if response:
-                        # Store or handle the response as needed
-                        pass
-                    
+                    await self.process_post_with_llm(post)
                     self.post_queue.task_done()
                 else:
                     await asyncio.sleep(1)
@@ -110,20 +134,16 @@ class RedditBot:
         self.logger.info("Bot started successfully")
         
         # Perform initial scan
-        self.initial_scan()
+        await self.initial_scan()
         
-        # Schedule regular post scanning
-        schedule.every(self.config.scan_interval).seconds.do(self.scan_posts)
-        
-        # Start scheduler thread
-        scheduler_thread = threading.Thread(target=self.run_scheduler)
-        scheduler_thread.start()
-        
-        # Process queue asynchronously
-        await self.process_queue()
+        # Process all queues concurrently
+        await asyncio.gather(
+            self.scheduled_scan(),
+            self.process_queue(),
+            self.comment_processor()
+        )
         
         # Cleanup
-        scheduler_thread.join()
         await self.post_handler.close()
         self.logger.info("Bot shutdown complete")
 
