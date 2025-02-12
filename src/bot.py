@@ -30,6 +30,14 @@ class RedditBot:
         # Set up signal handlers
         signal.signal(signal.SIGINT, self.handle_shutdown)
         signal.signal(signal.SIGTERM, self.handle_shutdown)
+        
+        # Add database status logging on startup
+        last_posts = self.post_handler.db.fetch_last_n_posts(5)
+        if last_posts:
+            self.logger.info(
+                f"Found {len(last_posts)} previously processed posts in database",
+                f"Last processed post: {last_posts[0][1][:50]}..."
+            )
     
     def scan_posts(self):
         """Scan for new posts and add them to the processing queue"""
