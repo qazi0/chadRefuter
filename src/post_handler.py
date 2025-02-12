@@ -2,6 +2,7 @@ from typing import Set, Optional, Dict, List
 from dataclasses import dataclass
 from datetime import datetime
 from llm_handler import LLMHandler, OllamaHandler
+from database import DatabaseHandler
 
 @dataclass
 class RedditPost:
@@ -35,6 +36,7 @@ class PostHandler:
         self.logger = logger
         self.post_cache = PostCache()
         self.llm_handler = OllamaHandler(logger)
+        self.db = DatabaseHandler(logger)  # Initialize database handler
     
     def fetch_new_posts(self, limit: int = 5) -> List[RedditPost]:
         """Fetch new posts from the subreddit"""
@@ -43,7 +45,8 @@ class PostHandler:
             new_posts = []
             
             for post in subreddit.new(limit=limit):
-                if not self.post_cache.contains(post.id):
+                # Check both cache and database
+                if not self.post_cache.contains(post.id) and not self.db.check_if_post_exists(post.id):
                     reddit_post = RedditPost(
                         id=post.id,
                         title=post.title,
@@ -53,6 +56,16 @@ class PostHandler:
                     )
                     new_posts.append(reddit_post)
                     self.post_cache.add(post.id)
+                    
+                    # Save to database without response
+                    self.db.save_post(
+                        post_id=post.id,
+                        subreddit=self.reddit_api.config.subreddit,
+                        title=post.title,
+                        post_text=post.selftext,
+                        author=str(post.author),
+                        timestamp=post.created_utc
+                    )
                     
                     # Create full and truncated log messages
                     full_message = (
@@ -107,23 +120,27 @@ class PostHandler:
             
             response = await self.llm_handler.generate_response(prompt)
             
-            # Create full and truncated log messages
-            full_message = (
-                f"Generated response for post {post.id}:\n"
-                f"Original title: {post.title}\n"
-                f"Original body: {post.body}\n"
-                f"Response: {response.text}"
-            )
+            if response and response.text:
+                # Update database with the response
+                self.db.update_post_response(post.id, response.text)
+                
+                # Create full and truncated log messages
+                full_message = (
+                    f"Generated response for post {post.id}:\n"
+                    f"Original title: {post.title}\n"
+                    f"Original body: {post.body}\n"
+                    f"Response: {response.text}"
+                )
+                
+                console_message = (
+                    f"Generated response for post {post.id}:\n"
+                    f"Title: {post.title[:50]}{'...' if len(post.title) > 50 else ''}\n"
+                    f"Response preview: {response.text[:100]}..."
+                )
+                
+                self.logger.info(full_message, console_message)
             
-            console_message = (
-                f"Generated response for post {post.id}:\n"
-                f"Title: {post.title[:50]}{'...' if len(post.title) > 50 else ''}\n"
-                f"Response preview: {response.text[:100]}..."
-            )
-            
-            self.logger.info(full_message, console_message)
-            
-            return response.text
+            return response.text if response else None
             
         except Exception as e:
             self.logger.error(f"Error processing post {post.id} through LLM: {str(e)}")
