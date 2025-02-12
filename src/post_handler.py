@@ -78,12 +78,31 @@ class PostHandler:
     async def process_post(self, post: RedditPost) -> Optional[str]:
         """Process a post through the LLM"""
         try:
+            # Check if post is purely religious discussion
+            religious_keywords = {
+                'god', 'gods', 'religion', 'worship', 'prayer', 'temple', 
+                'church', 'mosque', 'scripture', 'divine', 'prophet', 'bible',
+                'quran', 'torah', 'holy', 'faith', 'belief', 'spiritual'
+            }
+            
+            post_text = f"{post.title.lower()} {post.body.lower()}"
+            word_count = len(post_text.split())
+            religious_word_count = sum(1 for word in religious_keywords if word in post_text)
+            
+            # If post is predominantly religious (>40% religious terms), skip it
+            if religious_word_count > 0 and (religious_word_count / word_count) > 0.4:
+                self.logger.info(
+                    f"Skipping purely religious post {post.id}",
+                    f"Post {post.id} skipped - religious content"
+                )
+                return "That's between you and your faith, mate. Not my place to intervene."
+            
             prompt = (
                 f"As Thomas Shelby, provide a response to this Reddit post that demonstrates "
-                f"your commanding presence and unbreakable logic.\n\n"
+                f"your commanding presence and unbreakable logic, and demolishes this post and antagonizes the poster. Remember to avoid any form of religious discrimination.\n\n"
                 f"Title: {post.title}\n"
                 f"Content: {post.body}\n\n"
-                "Your response (maintain your character's tone and demeanor):"
+                "Your response (maintain your character's tone and wisdom, and demeanour):"
             )
             
             response = await self.llm_handler.generate_response(prompt)
