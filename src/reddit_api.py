@@ -11,7 +11,7 @@ class RedditAPI:
         self.logger = logger
         self.reddit = None
         self.initialize_reddit()
-        self.comment_delay = 25  # 25 seconds delay between comments
+        self.comment_delay = 120  # Changed to 120 seconds (2 minutes) delay between comments
         self.last_comment_time = 0
         
     def initialize_reddit(self):
@@ -58,15 +58,20 @@ class RedditAPI:
             # Calculate time to wait based on last comment
             current_time = time.time()
             time_since_last = current_time - self.last_comment_time
+            
             if time_since_last < self.comment_delay:
                 wait_time = self.comment_delay - time_since_last
-                self.logger.info(f"Rate limiting: Waiting {wait_time:.1f} seconds before posting comment")
+                self.logger.info(
+                    f"Rate limiting: Waiting {wait_time:.1f} seconds before posting comment",
+                    f"Waiting {wait_time:.1f}s before next comment"
+                )
                 await asyncio.sleep(wait_time)
 
             submission = self.reddit.submission(id=post_id)
             comment = submission.reply(body=text)
             
             self.last_comment_time = time.time()
+            self.logger.debug(f"Updated last comment time to: {self.last_comment_time}")
             return comment.id
 
         except Exception as e:
