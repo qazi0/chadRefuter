@@ -49,9 +49,22 @@ class DatabaseHandler:
                 )
             ''')
             
-            # Create indices for faster lookups
+            # Create comments table for tracking bot's comments
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS comments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    post_id TEXT NOT NULL,
+                    comment_id TEXT UNIQUE NOT NULL,
+                    comment_text TEXT NOT NULL,
+                    posted_at DATETIME NOT NULL,
+                    FOREIGN KEY (post_id) REFERENCES posts(post_id)
+                )
+            ''')
+            
+            # Create indices
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_post_id ON posts(post_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON posts(timestamp)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_comment_post_id ON comments(post_id)')
             
             conn.commit()
             self.logger.info("Database initialized successfully")
@@ -128,4 +141,30 @@ class DatabaseHandler:
                 
         except sqlite3.Error as e:
             self.logger.error(f"Database error while updating post {post_id}: {str(e)}")
+            return False
+
+    def save_comment(self, post_id: str, comment_id: str, comment_text: str) -> bool:
+        """Save a posted comment to the database"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO comments (post_id, comment_id, comment_text, posted_at)
+                    VALUES (?, ?, ?, ?)
+                ''', (post_id, comment_id, comment_text, datetime.now()))
+                conn.commit()
+                return True
+        except sqlite3.Error as e:
+            self.logger.error(f"Database error while saving comment: {str(e)}")
+            return False
+
+    def has_commented_on_post(self, post_id: str) -> bool:
+        """Check if we've already commented on a post"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT 1 FROM comments WHERE post_id = ?', (post_id,))
+                return cursor.fetchone() is not None
+        except sqlite3.Error as e:
+            self.logger.error(f"Database error while checking comment existence: {str(e)}")
             return False 
