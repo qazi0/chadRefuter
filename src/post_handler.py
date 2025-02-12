@@ -1,4 +1,4 @@
-from typing import Set, Optional, Dict, List
+from typing import Set, Optional, Dict, List, Type
 from dataclasses import dataclass
 from datetime import datetime
 from llm_handler import LLMHandler, OllamaHandler
@@ -32,12 +32,19 @@ class PostCache:
         return post_id in self._cache
 
 class PostHandler:
-    def __init__(self, reddit_api, logger):
+    def __init__(self, reddit_api, logger, llm_handler: Optional[LLMHandler] = None):
         self.reddit_api = reddit_api
         self.logger = logger
         self.post_cache = PostCache()
-        self.llm_handler = OllamaHandler(logger)
-        self.db = DatabaseHandler(logger)  # Initialize database handler
+        
+        # Try to initialize the LLM handler
+        try:
+            self.llm_handler = llm_handler or OllamaHandler(logger)
+        except Exception as e:
+            self.logger.error(f"Failed to initialize LLM handler: {str(e)}")
+            self.llm_handler = None
+        
+        self.db = DatabaseHandler(logger)
     
     def fetch_new_posts(self, limit: int = 5) -> List[RedditPost]:
         """Fetch new posts from the subreddit"""
@@ -95,6 +102,11 @@ class PostHandler:
             # Skip if we've already commented
             if self.db.has_commented_on_post(post.id):
                 self.logger.debug(f"Already commented on post {post.id}, skipping")
+                return None
+
+            # Check if LLM handler is available
+            if not self.llm_handler:
+                self.logger.error("No LLM handler available")
                 return None
 
             # Check if post is purely religious discussion
