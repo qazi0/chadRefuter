@@ -95,7 +95,7 @@ class PostHandler:
             religious_keywords = {
                 'god', 'gods', 'religion', 'worship', 'prayer', 'temple', 
                 'church', 'mosque', 'scripture', 'divine', 'prophet', 'bible',
-                'quran', 'torah', 'holy', 'faith', 'belief', 'spiritual'
+                'quran', 'torah', 'holy'
             }
             
             post_text = f"{post.title.lower()} {post.body.lower()}"
@@ -121,6 +121,17 @@ class PostHandler:
             response = await self.llm_handler.generate_response(prompt)
             
             if response and response.text:
+                # Check for discriminatory content
+                discriminatory_terms = {'religious discrimination', 'discrimination'}
+                response_lower = response.text.lower()
+                
+                if any(term in response_lower for term in discriminatory_terms):
+                    self.logger.warning(
+                        f"Rejected discriminatory response for post {post.id}: {response.text}",
+                        f"Rejected discriminatory response for post {post.id}"
+                    )
+                    return None
+                
                 # Update database with the response
                 self.db.update_post_response(post.id, response.text)
                 
