@@ -9,12 +9,32 @@ from logger import BotLogger
 from reddit_api import RedditAPI
 from post_handler import PostHandler, PostCache
 import asyncio
-from typing import Optional
+from typing import Optional, Type
+import argparse
+from llm_handler import (
+    LLMHandler,
+    OllamaHandler,
+    OpenAIHandler,
+    AnthropicHandler,
+    HuggingFaceHandler
+)
 
 class RedditBot:
-    def __init__(self):
+    def __init__(self, llm_provider: str = "ollama", llm_model: Optional[str] = None):
         self.logger = BotLogger()
         self.config = Config()
+        
+        # LLM provider mapping
+        self.llm_providers = {
+            "ollama": (OllamaHandler, "llama3.1:8b"),
+            "openai": (OpenAIHandler, "gpt-3.5-turbo"),
+            "anthropic": (AnthropicHandler, "claude-3-sonnet-20240229"),
+            "huggingface": (HuggingFaceHandler, "meta-llama/Llama-2-7b-chat-hf")
+        }
+        
+        # Initialize the chosen LLM handler
+        handler_class, default_model = self.llm_providers[llm_provider]
+        model = llm_model or default_model
         
         try:
             self.config.validate()
@@ -23,7 +43,11 @@ class RedditBot:
             sys.exit(1)
             
         self.reddit_api = RedditAPI(self.config, self.logger)
-        self.post_handler = PostHandler(self.reddit_api, self.logger)
+        self.post_handler = PostHandler(
+            self.reddit_api, 
+            self.logger,
+            llm_handler=handler_class(self.logger, model)
+        )
         self.running = False
         self.post_queue = asyncio.Queue()
         self.processing_queue = asyncio.Queue()
@@ -151,6 +175,26 @@ class RedditBot:
         """Main entry point"""
         asyncio.run(self.run_async())
 
+def main():
+    parser = argparse.ArgumentParser(description="Reddit Bot with multiple LLM providers")
+    parser.add_argument(
+        "--llm-provider",
+        choices=["ollama", "openai", "anthropic", "huggingface"],
+        default="ollama",
+        help="Choose the LLM provider (default: ollama)"
+    )
+    parser.add_argument(
+        "--llm-model",
+        help="Specify the model for the chosen provider (optional)"
+    )
+    
+    args = parser.parse_args()
+    
+    bot = RedditBot(
+        llm_provider=args.llm_provider,
+        llm_model=args.llm_model
+    )
+    bot.run()
+
 if __name__ == "__main__":
-    bot = RedditBot()
-    bot.run() 
+    main() 
