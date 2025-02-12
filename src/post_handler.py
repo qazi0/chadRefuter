@@ -79,10 +79,11 @@ class PostHandler:
         """Process a post through the LLM"""
         try:
             prompt = (
-                f"Please generate a helpful response to this Reddit post.\n\n"
+                f"As Thomas Shelby, provide a response to this Reddit post that demonstrates "
+                f"your commanding presence and unbreakable logic.\n\n"
                 f"Title: {post.title}\n"
                 f"Content: {post.body}\n\n"
-                "Response:"
+                "Your response (maintain your character's tone and demeanor):"
             )
             
             response = await self.llm_handler.generate_response(prompt)
