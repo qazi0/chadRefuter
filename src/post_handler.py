@@ -1,6 +1,7 @@
 from typing import Set, Optional, Dict, List
 from dataclasses import dataclass
 from datetime import datetime
+from llm_handler import LLMHandler, OllamaHandler
 
 @dataclass
 class RedditPost:
@@ -33,6 +34,7 @@ class PostHandler:
         self.reddit_api = reddit_api
         self.logger = logger
         self.post_cache = PostCache()
+        self.llm_handler = OllamaHandler(logger)
     
     def fetch_new_posts(self, limit: int = 5) -> List[RedditPost]:
         """Fetch new posts from the subreddit"""
@@ -52,16 +54,61 @@ class PostHandler:
                     new_posts.append(reddit_post)
                     self.post_cache.add(post.id)
                     
-                    # Log the new post
-                    preview = reddit_post.body[:10] + "..." if reddit_post.body else "No body"
-                    self.logger.info(
+                    # Create full and truncated log messages
+                    full_message = (
                         f"New post detected - ID: {reddit_post.id}\n"
                         f"Title: {reddit_post.title}\n"
-                        f"Preview: {preview}"
+                        f"Body: {reddit_post.body}"
                     )
+                    
+                    console_message = (
+                        f"New post detected - ID: {reddit_post.id}\n"
+                        f"Title: {reddit_post.title[:50]}{'...' if len(reddit_post.title) > 50 else ''}\n"
+                        f"Preview: {reddit_post.body[:50]}{'...' if len(reddit_post.body) > 50 else ''}"
+                    )
+                    
+                    self.logger.info(full_message, console_message)
             
             return new_posts
             
         except Exception as e:
             self.logger.error(f"Error fetching new posts: {str(e)}")
             return [] 
+
+    async def process_post(self, post: RedditPost) -> Optional[str]:
+        """Process a post through the LLM"""
+        try:
+            prompt = (
+                f"Please generate a helpful response to this Reddit post.\n\n"
+                f"Title: {post.title}\n"
+                f"Content: {post.body}\n\n"
+                "Response:"
+            )
+            
+            response = await self.llm_handler.generate_response(prompt)
+            
+            # Create full and truncated log messages
+            full_message = (
+                f"Generated response for post {post.id}:\n"
+                f"Original title: {post.title}\n"
+                f"Original body: {post.body}\n"
+                f"Response: {response.text}"
+            )
+            
+            console_message = (
+                f"Generated response for post {post.id}:\n"
+                f"Title: {post.title[:50]}{'...' if len(post.title) > 50 else ''}\n"
+                f"Response preview: {response.text[:100]}..."
+            )
+            
+            self.logger.info(full_message, console_message)
+            
+            return response.text
+            
+        except Exception as e:
+            self.logger.error(f"Error processing post {post.id} through LLM: {str(e)}")
+            return None
+
+    async def close(self):
+        """Cleanup resources"""
+        await self.llm_handler.close() 
