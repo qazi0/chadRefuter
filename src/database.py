@@ -61,10 +61,28 @@ class DatabaseHandler:
                 )
             ''')
             
+            # Create comment_replies table for tracking conversations
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS comment_replies (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    parent_comment_id TEXT NOT NULL,
+                    reply_comment_id TEXT UNIQUE NOT NULL,
+                    reply_text TEXT NOT NULL,
+                    author TEXT NOT NULL,
+                    conversation_depth INTEGER NOT NULL,
+                    llm_response TEXT,
+                    is_processed BOOLEAN DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (parent_comment_id) REFERENCES comments(comment_id)
+                )
+            ''')
+            
             # Create indices
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_post_id ON posts(post_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON posts(timestamp)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_comment_post_id ON comments(post_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_parent_comment ON comment_replies(parent_comment_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_reply_processed ON comment_replies(is_processed)')
             
             conn.commit()
             self.logger.info("Database initialized successfully")
@@ -167,4 +185,54 @@ class DatabaseHandler:
                 return cursor.fetchone() is not None
         except sqlite3.Error as e:
             self.logger.error(f"Database error while checking comment existence: {str(e)}")
+            return False
+
+    def save_comment_reply(self, parent_comment_id: str, reply_comment_id: str, 
+                          reply_text: str, author: str, conversation_depth: int,
+                          llm_response: Optional[str] = None) -> bool:
+        """Save a reply to one of the bot's comments"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT OR REPLACE INTO comment_replies 
+                    (parent_comment_id, reply_comment_id, reply_text, author, 
+                     conversation_depth, llm_response, is_processed)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (parent_comment_id, reply_comment_id, reply_text, author,
+                      conversation_depth, llm_response, bool(llm_response)))
+                conn.commit()
+                return True
+        except sqlite3.Error as e:
+            self.logger.error(f"Database error while saving comment reply: {str(e)}")
+            return False
+
+    def get_conversation_depth(self, comment_id: str) -> int:
+        """Get the depth of conversation for a comment"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT conversation_depth FROM comment_replies 
+                    WHERE reply_comment_id = ?
+                ''', (comment_id,))
+                result = cursor.fetchone()
+                return result[0] if result else 0
+        except sqlite3.Error as e:
+            self.logger.error(f"Database error while getting conversation depth: {str(e)}")
+            return 0
+
+    def is_reply_processed(self, reply_comment_id: str) -> bool:
+        """Check if a reply has already been processed"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT is_processed FROM comment_replies 
+                    WHERE reply_comment_id = ?
+                ''', (reply_comment_id,))
+                result = cursor.fetchone()
+                return bool(result[0]) if result else False
+        except sqlite3.Error as e:
+            self.logger.error(f"Database error while checking reply status: {str(e)}")
             return False 
