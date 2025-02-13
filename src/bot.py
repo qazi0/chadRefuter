@@ -19,9 +19,10 @@ from llm_handler import (
     HuggingFaceHandler,
     GeminiHandler
 )
+import os
 
 class RedditBot:
-    def __init__(self, llm_provider: str = "ollama", llm_model: Optional[str] = None):
+    def __init__(self, llm_provider: str = "ollama", llm_model: Optional[str] = None, system_prompt_path: str = "src/system_prompt.md"):
         self.logger = BotLogger()
         self.config = Config()
         
@@ -48,7 +49,7 @@ class RedditBot:
         self.post_handler = PostHandler(
             self.reddit_api, 
             self.logger,
-            llm_handler=handler_class(self.logger, model)
+            llm_handler=handler_class(self.logger, system_prompt_path, model)
         )
         self.running = False
         self.post_queue = asyncio.Queue()
@@ -189,12 +190,23 @@ def main():
         "--llm-model",
         help="Specify the model for the chosen provider (optional)"
     )
+    parser.add_argument(
+        "--system-prompt",
+        default="src/system_prompt.md",
+        help="Path to system prompt file (default: src/system_prompt.md)"
+    )
     
     args = parser.parse_args()
     
+    # Validate system prompt file exists
+    if not os.path.exists(args.system_prompt):
+        print(f"Error: System prompt file not found at {args.system_prompt}")
+        sys.exit(1)
+    
     bot = RedditBot(
         llm_provider=args.llm_provider,
-        llm_model=args.llm_model
+        llm_model=args.llm_model,
+        system_prompt_path=args.system_prompt
     )
     bot.run()
 
