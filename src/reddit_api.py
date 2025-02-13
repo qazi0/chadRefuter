@@ -22,7 +22,8 @@ class RedditAPI:
                 client_secret=self.config.client_secret,
                 username=self.config.username,
                 password=self.config.password,
-                user_agent=self.config.user_agent
+                user_agent=self.config.user_agent,
+                check_for_async=False
             )
             self.logger.info(f"Successfully authenticated as {self.config.username}")
         except PrawcoreException as e:
@@ -76,4 +77,49 @@ class RedditAPI:
 
         except Exception as e:
             self.logger.error(f"Error posting comment on {post_id}: {str(e)}")
+            return None 
+
+    async def get_bot_comments(self):
+        """Get the bot's recent comments"""
+        try:
+            comments = list(self.reddit.user.me().comments.new(limit=100))
+            for comment in comments:
+                yield comment
+        except Exception as e:
+            self.logger.error(f"Error fetching bot comments: {str(e)}")
+
+    async def get_comment_replies(self, comment_id: str):
+        """Get replies to a specific comment"""
+        try:
+            comment = self.reddit.comment(comment_id)
+            comment.refresh()  # Refresh to get the latest replies
+            return list(comment.replies)  # Convert CommentForest to list
+        except Exception as e:
+            self.logger.error(f"Error fetching comment replies: {str(e)}")
+            return []
+
+    async def post_reply(self, parent_id: str, text: str) -> Optional[str]:
+        """Post a reply to a comment"""
+        try:
+            # Calculate time to wait based on last comment
+            current_time = time.time()
+            time_since_last = current_time - self.last_comment_time
+            
+            if time_since_last < self.comment_delay:
+                wait_time = self.comment_delay - time_since_last
+                self.logger.info(
+                    f"Rate limiting: Waiting {wait_time:.1f} seconds before posting reply",
+                    f"Waiting {wait_time:.1f}s before next reply"
+                )
+                await asyncio.sleep(wait_time)
+
+            comment = self.reddit.comment(parent_id)
+            reply = comment.reply(body=text)
+            
+            self.last_comment_time = time.time()
+            self.logger.debug(f"Updated last comment time to: {self.last_comment_time}")
+            return reply.id
+
+        except Exception as e:
+            self.logger.error(f"Error posting reply to {parent_id}: {str(e)}")
             return None 
