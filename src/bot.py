@@ -16,7 +16,8 @@ from llm_handler import (
     OllamaHandler,
     OpenAIHandler,
     AnthropicHandler,
-    HuggingFaceHandler
+    HuggingFaceHandler,
+    GeminiHandler
 )
 
 class RedditBot:
@@ -29,7 +30,8 @@ class RedditBot:
             "ollama": (OllamaHandler, "llama3.1:8b"),
             "openai": (OpenAIHandler, "gpt-3.5-turbo"),
             "anthropic": (AnthropicHandler, "claude-3-sonnet-20240229"),
-            "huggingface": (HuggingFaceHandler, "meta-llama/Llama-2-7b-chat-hf")
+            "huggingface": (HuggingFaceHandler, "meta-llama/Llama-2-7b-chat-hf"),
+            "gemini": (GeminiHandler, "gemini-2.0-flash")
         }
         
         # Initialize the chosen LLM handler
@@ -179,7 +181,7 @@ def main():
     parser = argparse.ArgumentParser(description="Reddit Bot with multiple LLM providers")
     parser.add_argument(
         "--llm-provider",
-        choices=["ollama", "openai", "anthropic", "huggingface"],
+        choices=["ollama", "openai", "anthropic", "huggingface", "gemini"],
         default="ollama",
         help="Choose the LLM provider (default: ollama)"
     )
