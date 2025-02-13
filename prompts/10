@@ -1,0 +1,3 @@
+@llm_handler.py @bot.py 
+Implement classes for swapping out the LLM with OpenAI models, Anthropic Models and Hugging Face models hosted in the cloud. 
+Add a command line interface to supply command line args to the bot.py entry point, and for now add the choice of the LLM provider (default to Ollama on localhost). Add all the LLM provider API key env variables in the .env file 

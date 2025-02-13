@@ -1,0 +1,9 @@
+Analyze the @Codebase and fix this error that occurs upon running the bot with gemini model
+
+Traceback (most recent call last):
+  File "/Users/siraj/devstuff/ChadRefuter/src/llm_handler.py", line 333, in generate_response
+    return LLMResponse(text=generated_text, raw_response=response.model_dump())
+                                                         ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'AsyncGenerateContentResponse' object has no attribute 'model_dump'
+
+Ensure code completeness, correctness, accuracy and compatibility with previously written code

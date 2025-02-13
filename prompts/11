@@ -1,0 +1,17 @@
+Implement support in the appropriate files for Google Gemini API too so that gemini flash 2 and other Gemini models can also be used as the LLM provider
+@llm_handler.py @post_handler.py .env @bot.py 
+
+This is the curl request example for the model
+----
+curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=GEMINI_API_KEY" \
+-H 'Content-Type: application/json' \
+-X POST \
+-d '{
+  "contents": [{
+    "parts":[{"text": "Explain how AI works"}]
+    }]
+
+Implement the necessary changes so that the user can pick the gemini provider and model from the command line arguments just like the rest of the models and providers
+Ensure code completeness, correctness, accuracy and compatibility with previously written code
+   }'
+---

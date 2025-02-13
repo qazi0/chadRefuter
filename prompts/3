@@ -1,0 +1,3 @@
+Update the code in @src so that when the bot is run, it initially always fetches the latest 5 posts on the subreddit (and logs them etc), and then starts the scanning for new posts
+
+Ensure code correctness and compatibility with already written code

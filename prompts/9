@@ -1,0 +1,1 @@
+Implement changes in the appropriate files @post_handler.py @llm_handler.py and any other so that if the generated response contains the words "religious discrimination" and "discrimination", it is rejected and not processed/stored in the db, and is ignored

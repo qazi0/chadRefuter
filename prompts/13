@@ -1,0 +1,4 @@
+Move the entire system prompt text out of the @llm_handler.py file into a separate prompt.md file, and load the system prompt as a command line argument to the path for the file, defaulting to the file src/system_prompt.md, which is then passed into all the LLM handlers
+Implement needed changes in all the files @bot.py
+
+Ensure that OpenAIHandler and all other cloud Handlers correctly load the prompt from the prompt path in @llm_handler.py

@@ -1,0 +1,44 @@
+Your task is to generate a fully functional, production-ready Reddit bot that has the following features:
+
+1. Periodically scan a subreddit for new posts (every 60 seconds).
+2. Detect unprocessed posts and query a local LLM for a response.
+3. Comment the generated response on the detected Reddit post.
+4. Monitor for replies to its own comments every 5 minutes.
+5. Maintain a conversation thread by continuing to interact with users.
+6. Track up to 5 active conversations at any time.
+7. Implement rate-limiting, logging, error handling, and state tracking to ensure stability.
+8. Run as a background service with structured logging for monitoring.
+
+Ensure you follow modular coding best practices, ensuring that the project has an appropriate directory structure, and each function has a clear responsibility and is easily testable. Prioritize efficiency, maintainability, and API compliance while implementing this bot.
+
+We will begin implementing this stage by stage, building an initial MVP first and then adding features on top of it.
+----
+
+## Stage 1: Setting Up the Reddit Bot Framework
+Task: Implement the foundational structure of the bot using the praw library for Reddit API interactions.
+
+### Instructions for Code Generation
+- Create a Python project structured for modularity.
+- Use praw (Python Reddit API Wrapper) for API interaction instead of raw HTTP requests.
+- Implement OAuth authentication via Reddit's API (using credentials from praw.ini or .env).
+- Log every interaction to both the terminal and a persistent log file using Python’s logging module.
+- Ensure the bot runs as a background process (daemon-like behavior).
+- Implement rate-limiting safeguards by respecting Reddit’s API rules.
+- Set up environment variable support for storing sensitive credentials.
+### Code Specifications
+
+Modules:
+- bot.py (main entry point)
+- reddit_api.py (handles Reddit API authentication and interactions)
+- logger.py (handles structured logging)
+- config.py (configuration management)
+
+Environment Variables:
+CLIENT_ID
+CLIENT_SECRET
+USERNAME
+PASSWORD
+USER_AGENT
+
+# Expected Output for Stage 1:
+A basic skeleton of a Reddit bot capable of authenticating with Reddit’s API using praw

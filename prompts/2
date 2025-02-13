@@ -1,0 +1,18 @@
+@src 
+### Stage 2: Implementing Subreddit Scanning and Post Handling
+Task: Develop the bot’s ability to scan a specific subreddit every minute for new posts.
+
+#### Instructions for Code Generation
+-The bot should continuously scan the subreddit every 60 seconds.
+-Use PRAW’s subreddit.new(limit=5) to fetch the latest posts.
+-Maintain a cache of processed post IDs (use a simple in-memory set for now, make the code drop-in replaceable with redis later).
+-Upon detecting a new post, extract the title and body.
+-Log the post retrieval event, post title, as well as first 10 characters of the post body.
+
+Code Specifications
+-Implement threaded or async scheduling (schedule or asyncio).
+-Store processed post IDs in a simple in-memory set for now, make the code drop-in replaceable with redis later
+-Define a helper function fetch_new_posts(subreddit: str) -> list[dict].
+
+Expected Output for Stage 2
+-The bot should detect new posts and log them but not yet process replies.

@@ -1,0 +1,50 @@
+Integrate an SQLite database into the existing Reddit bot @Codebase  to store and manage Reddit posts, metadata, and LLM-generated responses efficiently. The database should allow logging of processed posts, tracking interactions, and ensuring no duplicate responses.
+
+-------
+Step 1: Define Database Schema & Setup
+Instruction:
+
+Implement an SQLite database using the sqlite3 library.
+Create a database file (e.g., reddit_bot.db) if it doesn’t exist.
+Define a table named posts with the following schema:
+id (Primary Key, Auto-increment)
+post_id (Unique, stores Reddit post ID)
+subreddit (Stores the subreddit name)
+title (Stores the post title)
+post_text (Stores the full post body)
+author (Stores the username of the post creator)
+timestamp (Stores the creation time of the post)
+llm_response (Stores the generated response from the LLM)
+response_timestamp (Stores the time when the bot responded)
+Ensure all database operations are handled within a try-except block for robustness.
+
+-------
+Step 2: Implement Database Interaction Methods
+Instruction:
+
+Implement helper functions to interact with the database:
+initialize_database() → Creates the posts table if it doesn’t exist.
+save_post(post_id, subreddit, title, post_text, author, timestamp, llm_response, response_timestamp) → Inserts a new record after processing a post.
+check_if_post_exists(post_id) → Returns True if the post is already in the database to avoid duplicate processing.
+fetch_last_n_posts(n=5) → Retrieves the latest n posts the bot has interacted with.
+fetch_unreplied_comments(post_id) → Retrieves comments on a post that need responses.
+Optimize queries using indexed searches to ensure performance.
+
+-------
+Step 3: Modify the Bot to Use the Database
+Instruction:
+
+Before processing a new post, call check_if_post_exists(post_id). If it exists, skip the post to avoid duplicate interactions.
+After generating an LLM response, store it in the database using save_post().
+Periodically fetch and log the last 5 posts the bot interacted with using fetch_last_n_posts().
+Extend the comment-tracking logic to store and track replies to the bot’s responses using an additional table comments (optional but recommended).
+
+-------
+Step 4: Ensure Logging & Debugging
+Instruction:
+
+Log every database transaction to a reddit_bot.log file for auditing.
+Print debugging messages indicating when posts are added, skipped, or retrieved from the database.
+Implement a safe shutdown procedure to close database connections gracefully on exit.
+
+Ensure code completeness, accuracy and compatibility with previously written code

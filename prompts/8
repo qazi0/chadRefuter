@@ -1,0 +1,2 @@
+Ensure that the database access/writes are thread-safe.
+Also write down any instructions if needed to get the database up and running 
