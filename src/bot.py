@@ -20,6 +20,7 @@ from llm_handler import (
     GeminiHandler
 )
 import os
+import random
 
 class RedditBot:
     def __init__(self, llm_provider: str = "ollama", llm_model: Optional[str] = None, system_prompt_path: str = "src/system_prompt.md"):
@@ -54,7 +55,13 @@ class RedditBot:
         self.running = False
         self.post_queue = asyncio.Queue()
         self.processing_queue = asyncio.Queue()
-        self._scan_lock = asyncio.Lock()  # Add lock for scanning
+        self._scan_lock = asyncio.Lock()
+        self.reply_queue = asyncio.Queue()
+        self.max_conversation_depth = 5
+        self.reply_delay_range = (30, 120)
+        
+        # Track if this is first run
+        self.has_previous_comments = self._check_previous_comments()
         
         # Set up signal handlers
         signal.signal(signal.SIGINT, self.handle_shutdown)
@@ -67,6 +74,15 @@ class RedditBot:
                 f"Found {len(last_posts)} previously processed posts in database",
                 f"Last processed post: {last_posts[0][1][:50]}..."
             )
+    
+    def _check_previous_comments(self) -> bool:
+        """Check if the bot has any previous comments"""
+        try:
+            comments = list(self.reddit_api.reddit.user.me().comments.new(limit=1))
+            return len(comments) > 0
+        except Exception as e:
+            self.logger.error(f"Error checking previous comments: {str(e)}")
+            return False
     
     async def scan_posts(self):
         """Scan for new posts and add them to the processing queue"""
@@ -127,6 +143,7 @@ class RedditBot:
                     comment_id = await self.reddit_api.post_comment(post.id, response)
                     
                     if comment_id:
+                        self.has_previous_comments = True  # Set flag when first comment is made
                         self.logger.info(
                             f"Successfully posted comment on {post.id}",
                             f"Comment posted: {comment_id}"
@@ -155,6 +172,103 @@ class RedditBot:
                 self.logger.error(f"Error in queue processing: {str(e)}")
                 await asyncio.sleep(5)
 
+    async def scan_comment_replies(self):
+        """Scan for new replies to the bot's comments"""
+        try:
+            self.logger.info("Scanning for new comment replies...")
+            
+            # Get bot's recent comments
+            async for comment in self.reddit_api.get_bot_comments():
+                # Get replies to this comment
+                replies = await self.reddit_api.get_comment_replies(comment.id)
+                
+                for reply in replies:
+                    # Skip if it's our own reply or already processed
+                    if (reply.author == self.config.username or 
+                        self.post_handler.db.is_reply_processed(reply.id)):
+                        continue
+                    
+                    # Get conversation depth
+                    depth = self.post_handler.db.get_conversation_depth(comment.id) + 1
+                    
+                    # Skip if max depth reached
+                    if depth > self.max_conversation_depth:
+                        continue
+                    
+                    # Queue reply for processing
+                    await self.reply_queue.put({
+                        'parent_comment_id': comment.id,
+                        'reply_id': reply.id,
+                        'reply_text': reply.body,
+                        'author': reply.author.name,
+                        'depth': depth
+                    })
+                    
+        except Exception as e:
+            self.logger.error(f"Error scanning comment replies: {str(e)}")
+
+    async def process_comment_replies(self):
+        """Process queued comment replies"""
+        while self.running:
+            try:
+                if not self.reply_queue.empty():
+                    reply_data = await self.reply_queue.get()
+                    
+                    # Generate response using LLM
+                    response = await self.post_handler.process_reply(
+                        reply_data['reply_text'],
+                        reply_data['depth']
+                    )
+                    
+                    if response:
+                        # Add random delay to seem more human-like
+                        delay = random.randint(*self.reply_delay_range)
+                        await asyncio.sleep(delay)
+                        
+                        # Post the reply
+                        reply_comment_id = await self.reddit_api.post_reply(
+                            reply_data['reply_id'],
+                            response
+                        )
+                        
+                        if reply_comment_id:
+                            # Save to database
+                            self.post_handler.db.save_comment_reply(
+                                reply_data['parent_comment_id'],
+                                reply_data['reply_id'],
+                                reply_data['reply_text'],
+                                reply_data['author'],
+                                reply_data['depth'],
+                                response
+                            )
+                            
+                            self.logger.info(
+                                f"Posted reply to comment {reply_data['reply_id']}",
+                                f"Reply: {response[:100]}..."
+                            )
+                    
+                    self.reply_queue.task_done()
+                else:
+                    await asyncio.sleep(1)
+                    
+            except Exception as e:
+                self.logger.error(f"Error processing comment reply: {str(e)}")
+                await asyncio.sleep(5)
+
+    async def scheduled_reply_scan(self):
+        """Periodic scan for comment replies"""
+        while self.running:
+            # Only scan for replies if we have previous comments
+            if self.has_previous_comments:
+                await self.scan_comment_replies()
+            else:
+                # Check if we have any comments now
+                self.has_previous_comments = self._check_previous_comments()
+                if not self.has_previous_comments:
+                    self.logger.debug("No previous comments found, skipping reply scan")
+            
+            await asyncio.sleep(300)  # 5 minutes
+
     async def run_async(self):
         """Async version of the main bot loop"""
         self.running = True
@@ -167,7 +281,9 @@ class RedditBot:
         await asyncio.gather(
             self.scheduled_scan(),
             self.process_queue(),
-            self.comment_processor()
+            self.comment_processor(),
+            self.scheduled_reply_scan(),  # Add reply scanning
+            self.process_comment_replies()  # Add reply processing
         )
         
         # Cleanup
