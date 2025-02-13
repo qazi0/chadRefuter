@@ -162,6 +162,20 @@ class PostHandler:
             self.logger.error(f"Error processing post {post.id} through LLM: {str(e)}")
             return None
 
+    async def process_reply(self, reply_text: str, depth: int) -> Optional[str]:
+        """Process a reply and generate a response"""
+        try:
+            # Add conversation depth context to the prompt
+            context = f"This is reply #{depth} in the conversation. "
+            prompt = f"{context}Please respond to this comment: {reply_text}"
+            
+            response = await self.llm_handler.generate_response(prompt)
+            return response.text if response else None
+            
+        except Exception as e:
+            self.logger.error(f"Error processing reply: {str(e)}")
+            return None
+
     async def close(self):
         """Cleanup resources"""
         await self.llm_handler.close() 
